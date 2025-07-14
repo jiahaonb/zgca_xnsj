@@ -12,7 +12,8 @@ from config import (
     DEEPSEEK_MODEL, 
     MAX_TOKENS, 
     TEMPERATURE,
-    SCHEDULER_SYSTEM_PROMPT
+    SCHEDULER_SYSTEM_PROMPT,
+    USER_CHARACTER_NAME
 )
 
 
@@ -129,24 +130,44 @@ class SchedulerAgent:
             是否创建成功
         """
         try:
-            character_count = len(characters_info)
-            if character_count == 0:
+            if len(characters_info) == 0:
                 return False
             
-            # 从API池获取密钥
-            api_keys = self.api_pool.get_keys(character_count)
+            # 分离用户主角和AI角色
+            user_character = None
+            ai_characters = []
             
-            # 创建角色智能体
-            for i, character_info in enumerate(characters_info):
-                character_name = character_info["name"]
-                character_detail = character_info["info"]
-                api_key = api_keys[i]
-                
-                character_agent = CharacterAgent(character_name, character_detail, api_key)
-                character_agent.set_scene_info(self.scene_setting, self.plot_summary)
-                
-                self.characters[character_name] = character_agent
+            for character_info in characters_info:
+                if character_info["name"] == USER_CHARACTER_NAME:
+                    user_character = character_info
+                else:
+                    ai_characters.append(character_info)
             
+            # 确保有用户主角
+            if not user_character:
+                print("❌ 未找到用户主角信息")
+                return False
+            
+            # 记录用户主角信息（不需要创建AI智能体）
+            self.characters[USER_CHARACTER_NAME] = "user_character"
+            
+            # 只为AI角色分配API密钥
+            ai_character_count = len(ai_characters)
+            if ai_character_count > 0:
+                api_keys = self.api_pool.get_keys(ai_character_count)
+                
+                # 创建AI角色智能体
+                for i, character_info in enumerate(ai_characters):
+                    character_name = character_info["name"]
+                    character_detail = character_info["info"]
+                    api_key = api_keys[i]
+                    
+                    character_agent = CharacterAgent(character_name, character_detail, api_key)
+                    character_agent.set_scene_info(self.scene_setting, self.plot_summary)
+                    
+                    self.characters[character_name] = character_agent
+            
+            print(f"✅ 创建完成：用户主角 + {ai_character_count} 个AI角色")
             return True
             
         except Exception as e:
@@ -155,7 +176,7 @@ class SchedulerAgent:
     
     def decide_next_speaker(self, current_situation: str = "") -> Optional[str]:
         """
-        决定下一个说话的角色
+        决定下一个说话的角色（包括用户主角）
         
         Args:
             current_situation: 当前情况描述
@@ -205,33 +226,100 @@ class SchedulerAgent:
             print(f"❌ 角色调度失败: {str(e)}")
             return None
     
-    def _extract_character_name(self, decision_text: str) -> Optional[str]:
+    def decide_next_ai_speaker(self, current_situation: str = "") -> Optional[str]:
+        """
+        决定下一个说话的AI角色（不包括用户主角）
+        
+        Args:
+            current_situation: 当前情况描述
+            
+        Returns:
+            下一个说话的AI角色名字
+        """
+        try:
+            # 构建对话历史
+            conversation_context = "\n".join(self.conversation_history[-10:])  # 最近10条对话
+            
+            # 构建AI角色列表（排除用户主角）
+            ai_characters = [name for name in self.characters.keys() if name != USER_CHARACTER_NAME]
+            if not ai_characters:
+                print("❌ 没有可用的AI角色")
+                return None
+            
+            character_list = ", ".join(ai_characters)
+            
+            user_input = f"""
+当前场景：{self.scene_setting}
+
+可选AI角色：{character_list}
+
+最近对话历史：
+{conversation_context}
+
+当前情况：{current_situation}
+
+请从AI角色中决定下一个应该说话的角色。注意：不要选择用户主角"{USER_CHARACTER_NAME}"。
+"""
+            
+            response = self.client.chat.completions.create(
+                model=DEEPSEEK_MODEL,
+                messages=[
+                    {"role": "system", "content": SCHEDULER_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_input}
+                ],
+                temperature=TEMPERATURE,
+                max_tokens=512,
+                stream=False
+            )
+            
+            decision_text = response.choices[0].message.content.strip()
+            
+            # 从回应中提取角色名
+            next_speaker = self._extract_character_name(decision_text, ai_only=True)
+            
+            return next_speaker
+            
+        except Exception as e:
+            print(f"❌ AI角色调度失败: {str(e)}")
+            return None
+    
+    def _extract_character_name(self, decision_text: str, ai_only: bool = False) -> Optional[str]:
         """
         从调度决定中提取角色名
         
         Args:
             decision_text: 调度决定文本
+            ai_only: 是否只从AI角色中选择
             
         Returns:
             角色名字
         """
+        # 获取候选角色列表
+        if ai_only:
+            candidate_characters = [name for name in self.characters.keys() if name != USER_CHARACTER_NAME]
+        else:
+            candidate_characters = list(self.characters.keys())
+        
+        if not candidate_characters:
+            return None
+        
         # 尝试匹配 "下一个说话的角色：角色名" 格式
         match = re.search(r'下一个说话的角色：(.+)', decision_text)
         if match:
             character_name = match.group(1).strip()
             # 检查是否是有效的角色名
-            for name in self.characters.keys():
+            for name in candidate_characters:
                 if name in character_name:
                     return name
         
         # 如果没有匹配到格式，尝试直接在文本中查找角色名
-        for character_name in self.characters.keys():
+        for character_name in candidate_characters:
             if character_name in decision_text:
                 return character_name
         
-        # 如果都没找到，返回第一个角色
-        if self.characters:
-            return list(self.characters.keys())[0]
+        # 如果都没找到，返回第一个候选角色
+        if candidate_characters:
+            return candidate_characters[0]
         
         return None
     
@@ -244,9 +332,10 @@ class SchedulerAgent:
         """
         self.conversation_history.append(message)
         
-        # 同时添加到所有角色的历史记录
-        for character in self.characters.values():
-            character.add_to_history(message)
+        # 同时添加到所有AI角色的历史记录
+        for name, character in self.characters.items():
+            if name != USER_CHARACTER_NAME:  # 跳过用户主角
+                character.add_to_history(message)
     
     def get_character_agent(self, character_name: str) -> Optional[CharacterAgent]:
         """
@@ -256,8 +345,10 @@ class SchedulerAgent:
             character_name: 角色名字
             
         Returns:
-            角色智能体
+            角色智能体，如果是用户主角则返回None
         """
+        if character_name == USER_CHARACTER_NAME:
+            return None  # 用户主角不是AI智能体
         return self.characters.get(character_name)
     
     def get_characters_info(self) -> List[Dict[str, str]]:
@@ -267,12 +358,27 @@ class SchedulerAgent:
         Returns:
             角色信息列表
         """
-        return [character.get_character_info() for character in self.characters.values()]
+        characters_info = []
+        for name, character in self.characters.items():
+            if name == USER_CHARACTER_NAME:
+                # 用户主角的信息
+                characters_info.append({
+                    "name": USER_CHARACTER_NAME,
+                    "info": "用户扮演的主角",
+                    "type": "user"
+                })
+            else:
+                # AI角色的信息
+                character_info = character.get_character_info()
+                character_info["type"] = "ai"
+                characters_info.append(character_info)
+        return characters_info
     
     def clear_all_history(self):
         """
         清空所有历史记录
         """
         self.conversation_history.clear()
-        for character in self.characters.values():
-            character.clear_history() 
+        for name, character in self.characters.items():
+            if name != USER_CHARACTER_NAME:  # 跳过用户主角
+                character.clear_history() 

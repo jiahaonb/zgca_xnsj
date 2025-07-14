@@ -5,7 +5,7 @@
 from typing import Optional, Dict, Any
 from scheduler_agent import SchedulerAgent
 from api_pool import APIKeyPool
-from config import API_KEYS
+from config import API_KEYS, USER_CHARACTER_NAME
 
 
 class ScriptSystem:
@@ -23,6 +23,7 @@ class ScriptSystem:
         
         self.is_initialized = False
         self.conversation_count = 0
+        self.last_speaker = None  # 记录上一个说话的角色
         
     def initialize_script(self, user_input: str) -> Dict[str, Any]:
         """
@@ -83,15 +84,41 @@ class ScriptSystem:
             return
         
         print(f"\n🎬 开始 {rounds} 轮对话...")
+        print("💡 优化的交互体验：")
+        print("  - 当需要您说话时，直接输入台词，按回车跳过")
+        print("  - 您说话后会直接调度AI角色，AI说话后才会再次询问您")
         print("=" * 60)
+        
+        # 重置对话状态
+        self.last_speaker = None
         
         for round_num in range(1, rounds + 1):
             print(f"\n【第 {round_num} 轮对话】")
             print("-" * 30)
             
-            # 调度agent决定下一个说话的角色
+            # 根据上一个说话的人决定流程
+            if self.last_speaker != USER_CHARACTER_NAME:
+                # 上一个不是用户说话（或者是第一轮），询问用户
+                user_speech = self._get_user_speech_or_skip()
+                
+                if user_speech == "QUIT":  # 用户选择退出
+                    break
+                elif user_speech is not None:  # 用户说话
+                    # 输出用户回应
+                    print(f"💬 {USER_CHARACTER_NAME}：{user_speech}")
+                    
+                    # 添加到历史记录
+                    formatted_response = f"{USER_CHARACTER_NAME}：{user_speech}"
+                    self.scheduler.add_to_history(formatted_response)
+                    self.last_speaker = USER_CHARACTER_NAME
+                    
+                    self.conversation_count += 1
+                    continue  # 用户说话后，下一轮直接调度AI
+                # else: user_speech is None，用户跳过，继续下面的AI调度
+            
+            # 调度AI角色说话
             current_situation = f"这是第{round_num}轮对话"
-            next_speaker = self.scheduler.decide_next_speaker(current_situation)
+            next_speaker = self.scheduler.decide_next_ai_speaker(current_situation)
             
             if not next_speaker:
                 print("❌ 调度失败，无法确定下一个说话的角色")
@@ -99,7 +126,7 @@ class ScriptSystem:
             
             print(f"🎯 调度结果：{next_speaker} 说话")
             
-            # 获取角色agent并生成回应
+            # AI角色说话
             character_agent = self.scheduler.get_character_agent(next_speaker)
             if not character_agent:
                 print(f"❌ 未找到角色 {next_speaker} 的智能体")
@@ -113,12 +140,39 @@ class ScriptSystem:
             
             # 添加到历史记录
             self.scheduler.add_to_history(character_response)
+            self.last_speaker = next_speaker
             
             self.conversation_count += 1
             
             # 在每轮之间添加分隔
             if round_num < rounds:
                 print()
+    
+    def _get_user_speech_or_skip(self) -> Optional[str]:
+        """
+        获取用户台词或跳过
+        
+        Returns:
+            str: 用户的台词内容
+            None: 用户选择跳过
+            "QUIT": 用户选择退出
+        """
+        try:
+            user_input = input("🎭 请输入您的台词 (直接按回车跳过，输入'quit'退出): ").strip()
+            
+            if user_input.lower() in ['quit', 'exit', '退出', 'q']:
+                print("👋 退出对话")
+                return "QUIT"
+            elif user_input == "":
+                return None  # 用户选择跳过
+            else:
+                return user_input  # 用户的台词
+                
+        except KeyboardInterrupt:
+            print("\n👋 对话被中断")
+            return "QUIT"
+    
+
     
     def interactive_conversation(self) -> None:
         """
@@ -129,8 +183,20 @@ class ScriptSystem:
             return
         
         print("\n🎬 进入交互式对话模式")
-        print("输入 'quit' 或 'exit' 退出，输入 'auto [数字]' 进行自动对话")
+        print("输入指令或情境描述来推进剧情")
+        print("💡 优化的交互体验：")
+        print("  - 当需要您说话时，直接输入台词，按回车跳过")
+        print("  - 您说话后会直接调度AI角色，AI说话后才会再次询问您")
+        print("📝 可用指令:")
+        print("  - 'quit' 或 'exit': 退出对话模式")
+        print("  - 'auto [数字]': 进行自动对话")
+        print("  - 'next': 推进到下一轮对话")
+        print("  - 其他文字: 作为情境描述推进剧情")
         print("=" * 60)
+        
+        # 重置对话状态
+        if not hasattr(self, 'last_speaker'):
+            self.last_speaker = None
         
         while True:
             try:
@@ -152,8 +218,28 @@ class ScriptSystem:
                 # 手动指定情境
                 current_situation = user_input if user_input else "继续对话"
                 
-                # 调度决定下一个说话的角色
-                next_speaker = self.scheduler.decide_next_speaker(current_situation)
+                # 根据上一个说话的人决定流程
+                if self.last_speaker != USER_CHARACTER_NAME:
+                    # 上一个不是用户说话，询问用户
+                    user_speech = self._get_user_speech_or_skip()
+                    
+                    if user_speech == "QUIT":  # 用户选择退出
+                        break
+                    elif user_speech is not None:  # 用户说话
+                        # 输出用户回应
+                        print(f"💬 {USER_CHARACTER_NAME}：{user_speech}")
+                        
+                        # 添加到历史记录
+                        formatted_response = f"{USER_CHARACTER_NAME}：{user_speech}"
+                        self.scheduler.add_to_history(formatted_response)
+                        self.last_speaker = USER_CHARACTER_NAME
+                        
+                        self.conversation_count += 1
+                        continue  # 用户说话后，下一轮直接调度AI
+                    # else: user_speech is None，用户跳过，继续下面的AI调度
+                
+                # 调度AI角色说话
+                next_speaker = self.scheduler.decide_next_ai_speaker(current_situation)
                 
                 if not next_speaker:
                     print("❌ 调度失败，无法确定下一个说话的角色")
@@ -161,7 +247,7 @@ class ScriptSystem:
                 
                 print(f"🎯 调度结果：{next_speaker} 说话")
                 
-                # 获取角色agent并生成回应
+                # AI角色说话
                 character_agent = self.scheduler.get_character_agent(next_speaker)
                 if not character_agent:
                     print(f"❌ 未找到角色 {next_speaker} 的智能体")
@@ -175,6 +261,7 @@ class ScriptSystem:
                 
                 # 添加到历史记录
                 self.scheduler.add_to_history(character_response)
+                self.last_speaker = next_speaker
                 
                 self.conversation_count += 1
                 
@@ -199,6 +286,7 @@ class ScriptSystem:
         """
         self.scheduler.clear_all_history()
         self.conversation_count = 0
+        self.last_speaker = None
         print("✅ 对话历史已清空")
     
     def get_system_status(self) -> Dict[str, Any]:
@@ -237,4 +325,7 @@ class ScriptSystem:
         if status['initialized'] and status['characters_count'] > 0:
             print("\n🎭 角色列表:")
             for character in status['characters']:
-                print(f"  - {character['name']}") 
+                if character.get('type') == 'user':
+                    print(f"  - {character['name']} (用户主角) 👤")
+                else:
+                    print(f"  - {character['name']} (AI角色) 🤖") 
