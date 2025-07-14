@@ -138,7 +138,7 @@ class SchedulerAgent:
             ai_characters = []
             
             for character_info in characters_info:
-                if character_info["name"] == USER_CHARACTER_NAME:
+                if USER_CHARACTER_NAME in character_info["name"]:
                     user_character = character_info
                 else:
                     ai_characters.append(character_info)
