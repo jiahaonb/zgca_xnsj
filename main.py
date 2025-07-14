@@ -1,127 +1,170 @@
-import os
-from typing import Dict, Any
-from openai import OpenAI
+"""
+多智能体剧本编辑系统主程序
+基于调度agent和多个角色agents的架构
+"""
 
-class ScriptEditingSystem:
-    def __init__(self, api_key: str = None):
-        """
-        初始化剧本编辑系统
-        
-        Args:
-            api_key: DeepSeek API密钥，如果不提供则从环境变量读取
-        """
-        self.api_key = "sk-b5d99239cf204027ba552eee5c7573ba"
-        
-        # 初始化deepseek客户端
-        if self.api_key:
-            self.client = OpenAI(api_key=self.api_key, base_url="https://api.deepseek.com")
+from script_system import ScriptSystem
+
+
+def print_welcome():
+    """
+    打印欢迎信息
+    """
+    print("🎭" + "=" * 58 + "🎭")
+    print("    欢迎使用多智能体剧本编辑系统！")
+    print("=" * 60)
+    print("✨ 系统特点：")
+    print("  - 🤖 调度Agent：智能创建剧本设定和角色调度")
+    print("  - 🎭 角色Agents：每个角色使用独立的API密钥")
+    print("  - 🎬 实时对话：支持自动和交互式对话模式")
+    print("  - 📊 状态管理：实时监控系统和API使用状况")
+    print("=" * 60)
+
+
+def print_menu():
+    """
+    打印主菜单
+    """
+    print("\n📋 主菜单")
+    print("-" * 30)
+    print("1. 🎭 创建新剧本")
+    print("2. 🎬 开始自动对话")
+    print("3. 🎮 交互式对话")
+    print("4. 📊 查看系统状态")
+    print("5. 🗑️  清空对话历史")
+    print("6. 🚪 退出系统")
+    print("-" * 30)
+
+
+def create_new_script(script_system: ScriptSystem):
+    """
+    创建新剧本
+    
+    Args:
+        script_system: 剧本系统实例
+    """
+    print("\n🎭 创建新剧本")
+    print("=" * 40)
+    print("请描述您想要的剧本场景和限制条件")
+    print("例如：现代都市背景，三个朋友在咖啡厅讨论创业计划")
+    print("-" * 40)
+    
+    user_input = input("📝 请输入场景描述: ").strip()
+    
+    if not user_input:
+        print("❌ 场景描述不能为空")
+        return
+    
+    if user_input.lower() in ['quit', 'exit', '退出', 'q']:
+        return
+    
+    # 初始化剧本
+    result = script_system.initialize_script(user_input)
+    
+    if "error" in result:
+        print(f"❌ {result['error']}")
+    else:
+        print(f"\n✅ 剧本创建成功！共创建了 {result['characters_count']} 个角色")
+
+
+def start_auto_conversation(script_system: ScriptSystem):
+    """
+    开始自动对话
+    
+    Args:
+        script_system: 剧本系统实例
+    """
+    if not script_system.is_initialized:
+        print("❌ 请先创建剧本设定")
+        return
+    
+    print("\n🎬 自动对话模式")
+    print("-" * 30)
+    
+    try:
+        rounds_input = input("请输入对话轮数 (默认5轮): ").strip()
+        if rounds_input and rounds_input.isdigit():
+            rounds = int(rounds_input)
         else:
-            self.client = None
+            rounds = 5
         
-        # 系统提示词
-        self.system_prompt = """你现在是一个剧本编辑系统。用户输入了场景及简单的限制之后，你可以根据输入创建一个简单的剧本，包括角色、剧情等。你担任调度员的角色，调度之后角色的反应。你的任务是基于用户的输入，构思一个剧本的开端，包括背景、角色和初始情境。在剧本进行中，你需要阅读完整的对话历史，然后决定下一个应该说话的角色是谁。你的输出必须清晰地指明下一个角色的名字。
-
-        请按照以下格式输出剧本：
-
-        【场景设定】
-        [描述场景的时间、地点、环境等]
-
-        【主要角色】
-        [列出主要角色及其基本信息]
-
-        【剧情大纲】
-        [简要描述整个剧情的发展脉络]
-
-        【详细剧本】
-        [包含对话、动作、场景描述等的完整剧本内容]
-
-        【角色反应调度】
-        [作为调度员，分析各角色在关键情节点的心理状态和可能反应]
-
-        请确保剧本内容丰富、角色性格鲜明、情节发展合理。"""
-
-    def call_deepseek_api(self, user_input: str):
-        """
-        调用DeepSeek API
+        if rounds > 50:
+            print("⚠️ 对话轮数过多，已限制为50轮")
+            rounds = 50
         
-        Args:
-            user_input: 用户输入的场景和限制
-            
-        Returns:
-            API响应结果
-        """
-        if not self.client:
-            return {"error": "请设置DeepSeek API密钥"}
-            
-        try:
-            response = self.client.chat.completions.create(
-                model="deepseek-chat",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": self.system_prompt
-                    },
-                    {
-                        "role": "user", 
-                        "content": user_input
-                    }
-                ],
-                temperature=0.8,
-                max_tokens=2048,
-                stream=False
-            )
-            return response
-            
-        except Exception as e:
-            return {"error": f"API调用失败: {str(e)}"}
+        script_system.start_conversation(rounds)
+        
+    except ValueError:
+        print("❌ 请输入有效的数字")
+    except KeyboardInterrupt:
+        print("\n⏹️ 对话已中断")
 
-    def generate_script(self, user_input: str) -> str:
-        """
-        生成剧本
-        
-        Args:
-            user_input: 用户输入的场景和限制
-            
-        Returns:
-            生成的剧本内容
-        """
-        result = self.call_deepseek_api(user_input)
-        
-        # 检查是否有错误
-        if isinstance(result, dict) and "error" in result:
-            return f"❌ {result['error']}"
-        
-        try:
-            script_content = result.choices[0].message.content
-            return script_content
-        except (AttributeError, IndexError) as e:
-            return f"❌ 解析API响应失败: {str(e)}"
 
-    def run(self):
-        """
-        运行主程序
-        """
-        print("🎭 欢迎使用剧本编辑系统！")
-        print("=" * 50)
-        
-        user_input = input("\n📝 请输入场景和限制: ").strip()
-        if user_input.lower() in ['quit', 'exit', '退出', 'q']:
-            print("👋 感谢使用剧本编辑系统，再见！")
-            return
-        
-        print("\n🤖 正在生成剧本，请稍候...")
-        print("-" * 50)
+def start_interactive_conversation(script_system: ScriptSystem):
+    """
+    开始交互式对话
+    
+    Args:
+        script_system: 剧本系统实例
+    """
+    if not script_system.is_initialized:
+        print("❌ 请先创建剧本设定")
+        return
+    
+    script_system.interactive_conversation()
 
-        script = self.generate_script(user_input)
-        print(script)
-        
+
 def main():
     """
     主函数
     """
+    print_welcome()
     
-    system = ScriptEditingSystem()
-    system.run()
+    # 初始化剧本系统
+    try:
+        script_system = ScriptSystem()
+    except ValueError as e:
+        print(f"❌ 系统初始化失败: {str(e)}")
+        print("请检查config.py中的API_KEYS配置")
+        return
+    except Exception as e:
+        print(f"❌ 系统初始化失败: {str(e)}")
+        return
+    
+    # 主循环
+    while True:
+        try:
+            print_menu()
+            choice = input("\n🎯 请选择操作 (1-6): ").strip()
+            
+            if choice == '1':
+                create_new_script(script_system)
+            
+            elif choice == '2':
+                start_auto_conversation(script_system)
+            
+            elif choice == '3':
+                start_interactive_conversation(script_system)
+            
+            elif choice == '4':
+                script_system.print_system_status()
+            
+            elif choice == '5':
+                script_system.clear_history()
+            
+            elif choice == '6':
+                print("👋 感谢使用多智能体剧本编辑系统，再见！")
+                break
+            
+            else:
+                print("❌ 无效选择，请输入1-6之间的数字")
+        
+        except KeyboardInterrupt:
+            print("\n👋 感谢使用多智能体剧本编辑系统，再见！")
+            break
+        except Exception as e:
+            print(f"❌ 发生未知错误: {str(e)}")
+            print("系统将继续运行...")
 
 
 if __name__ == "__main__":
