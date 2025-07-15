@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZGCA多智能体剧本编辑系统</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- 背景图片 -->
+    <div class="background-image"></div>
+    
+    <!-- 主容器 -->
+    <div class="app-container">
+        <!-- 顶部标题栏 -->
+        <header class="app-header">
+            <div class="header-content">
+                <div class="logo-section">
+                    <i class="fas fa-theater-masks"></i>
+                    <h1>ZGCA剧本系统</h1>
+                </div>
+                <div class="header-actions">
+                    <button class="btn-icon" id="statusBtn" title="系统状态">
+                        <i class="fas fa-info-circle"></i>
+                    </button>
+                    <button class="btn-icon" id="settingsBtn" title="设置">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- 主内容区域 -->
+        <main class="main-content">
+            <!-- 左侧控制面板 -->
+            <aside class="control-panel">
+                <div class="panel-content glass-effect">
+                    <h2><i class="fas fa-clapperboard"></i> 剧本控制</h2>
+                    
+                    <!-- 场景设置区域 -->
+                    <div class="scene-setup">
+                        <h3>创建新剧本</h3>
+                        <textarea 
+                            id="sceneInput" 
+                            placeholder="请输入场景描述...&#10;&#10;示例：&#10;现代都市背景，朋友们在咖啡厅讨论创业计划"
+                            rows="4"
+                        ></textarea>
+                        <button class="btn-primary" id="createScriptBtn">
+                            <i class="fas fa-magic"></i> 创建剧本
+                        </button>
+                    </div>
+
+                    <!-- 对话控制 -->
+                    <div class="conversation-controls">
+                        <h3>对话控制</h3>
+                        <div class="control-buttons">
+                            <button class="btn-secondary" id="startConversationBtn" disabled>
+                                <i class="fas fa-play"></i> 开始对话
+                            </button>
+                            <button class="btn-secondary" id="clearHistoryBtn">
+                                <i class="fas fa-trash"></i> 清空历史
+                            </button>
+                        </div>
+                        
+                        <div class="round-setting">
+                            <label for="roundsInput">对话轮数:</label>
+                            <input type="number" id="roundsInput" value="5" min="1" max="20">
+                        </div>
+                    </div>
+
+                    <!-- 系统状态 -->
+                    <div class="system-status">
+                        <h3>系统状态</h3>
+                        <div class="status-indicator">
+                            <span class="status-dot" id="statusDot"></span>
+                            <span id="statusText">等待连接</span>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- 右侧对话区域 -->
+            <section class="conversation-area">
+                <div class="chat-container glass-effect">
+                    <div class="chat-header">
+                        <h2><i class="fas fa-comments"></i> 对话历史</h2>
+                        <div class="chat-actions">
+                            <button class="btn-icon" id="exportBtn" title="导出对话">
+                                <i class="fas fa-download"></i>
+                            </button>
+                            <button class="btn-icon" id="fullscreenBtn" title="全屏模式">
+                                <i class="fas fa-expand"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="welcome-message">
+                            <div class="welcome-content">
+                                <i class="fas fa-theater-masks"></i>
+                                <h3>欢迎使用多智能体剧本编辑系统</h3>
+                                <p>请先创建剧本设定，然后开始精彩的对话之旅！</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 用户输入区域 -->
+                    <div class="input-area">
+                        <div class="input-container">
+                            <textarea 
+                                id="messageInput" 
+                                placeholder="输入您的台词..." 
+                                rows="2"
+                                disabled
+                            ></textarea>
+                            <div class="input-actions">
+                                <button class="btn-icon" id="skipBtn" title="跳过本轮" disabled>
+                                    <i class="fas fa-forward"></i>
+                                </button>
+                                <button class="btn-send" id="sendBtn" disabled>
+                                    <i class="fas fa-paper-plane"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- 状态栏 -->
+        <footer class="status-bar">
+            <div class="status-info">
+                <span id="connectionStatus">
+                    <i class="fas fa-circle"></i> 未连接
+                </span>
+                <span id="messageCount">消息: 0</span>
+                <span id="currentTime"></span>
+            </div>
+        </footer>
+    </div>
+
+    <!-- 模态对话框 -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal glass-effect" id="modal">
+            <div class="modal-header">
+                <h3 id="modalTitle">标题</h3>
+                <button class="btn-icon" id="modalCloseBtn">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-content" id="modalContent">
+                <!-- 动态内容 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 加载动画 -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>正在处理...</p>
+        </div>
+    </div>
+
+    <!-- 通知提示 -->
+    <div class="notification" id="notification">
+        <div class="notification-content">
+            <i class="notification-icon"></i>
+            <span class="notification-message"></span>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html> 

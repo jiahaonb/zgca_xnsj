@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZGCA测试页面</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .test-container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 40px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        h1 {
+            margin-bottom: 20px;
+            font-size: 2em;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+        .success {
+            background: rgba(76, 175, 80, 0.3);
+        }
+        .error {
+            background: rgba(244, 67, 54, 0.3);
+        }
+        button {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border: none;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 14px;
+        }
+        button:hover {
+            transform: translateY(-1px);
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🎭 ZGCA 系统测试</h1>
+        <div id="status-list">
+            <div class="status success">✅ HTML 加载成功</div>
+            <div class="status success">✅ CSS 渲染正常</div>
+            <div class="status" id="js-status">⏳ JavaScript 检测中...</div>
+            <div class="status" id="electron-status">⏳ Electron API 检测中...</div>
+            <div class="status" id="backend-status">⏳ 后端连接检测中...</div>
+        </div>
+        
+        <div style="margin-top: 30px;">
+            <button onclick="testConnection()">🔄 重新测试</button>
+            <button onclick="openMainApp()">🚀 启动主应用</button>
+            <button onclick="showDevTools()">🔧 开发者工具</button>
+        </div>
+        
+        <div id="error-info" style="margin-top: 20px; display: none;"></div>
+    </div>
+
+    <script>
+        console.log('Test page loaded');
+        
+        // 测试JavaScript
+        document.getElementById('js-status').innerHTML = '✅ JavaScript 运行正常';
+        document.getElementById('js-status').className = 'status success';
+        
+        // 测试Electron API
+        if (typeof window.electronAPI !== 'undefined') {
+            document.getElementById('electron-status').innerHTML = '✅ Electron API 可用';
+            document.getElementById('electron-status').className = 'status success';
+        } else {
+            document.getElementById('electron-status').innerHTML = '❌ Electron API 不可用';
+            document.getElementById('electron-status').className = 'status error';
+        }
+        
+        // 测试后端连接
+        async function testBackend() {
+            try {
+                const response = await fetch('http://localhost:8899/api/status');
+                const data = await response.json();
+                if (data.success) {
+                    document.getElementById('backend-status').innerHTML = '✅ 后端连接正常';
+                    document.getElementById('backend-status').className = 'status success';
+                } else {
+                    throw new Error('后端响应异常');
+                }
+            } catch (error) {
+                document.getElementById('backend-status').innerHTML = '❌ 后端连接失败: ' + error.message;
+                document.getElementById('backend-status').className = 'status error';
+            }
+        }
+        
+        function testConnection() {
+            document.getElementById('backend-status').innerHTML = '⏳ 重新检测后端...';
+            document.getElementById('backend-status').className = 'status';
+            testBackend();
+        }
+        
+        function openMainApp() {
+            window.location.href = './renderer/index.html';
+        }
+        
+        function showDevTools() {
+            if (window.electronAPI) {
+                // 可以添加打开开发者工具的功能
+                console.log('Opening dev tools...');
+            } else {
+                alert('Electron API 不可用');
+            }
+        }
+        
+        // 页面加载完成后测试后端
+        setTimeout(testBackend, 1000);
+        
+        // 错误处理
+        window.addEventListener('error', function(e) {
+            const errorDiv = document.getElementById('error-info');
+            errorDiv.style.display = 'block';
+            errorDiv.innerHTML = `<div class="status error">❌ 错误: ${e.message}</div>`;
+            console.error('Page error:', e);
+        });
+    </script>
+</body>
+</html> 
